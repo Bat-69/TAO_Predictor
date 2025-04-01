@@ -17,9 +17,9 @@ st.title("📈 TAO Predictor - Prédiction à 7 et 30 jours")
 # API CoinGecko pour récupérer l'historique des prix
 COINGECKO_URL = "https://api.coingecko.com/api/v3/coins/bittensor/market_chart"
 
-def get_tao_history(days=730):  # 2 ans d'historique
+def get_tao_history(days=365):  # 1 ans d'historique
     params = {"vs_currency": "usd", "days": days, "interval": "daily"}
-    response = requests.get(COINGECKO_URL, params=params)
+    response = requests.def get_tao_history(days=365):  # CoinGecko limite à 365 jours pour les comptes gratuits(COINGECKO_URL, params=params)
     
     if response.status_code == 200:
         data = response.json()
