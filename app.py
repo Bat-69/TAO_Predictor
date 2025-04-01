@@ -118,7 +118,7 @@ if st.button("📊 Afficher les prévisions sur 7 jours"):
         # Création du graphique
         plt.figure(figsize=(10, 5))
         plt.plot(df["timestamp"], df["price"], label="Prix réel", color="blue")
-        future_dates = pd.date_range(start=df["timestamp"].iloc[-1], periods=8, freq="D")[1:]
+        future_dates = pd.date_range(start=df["timestamp"].iloc[-1], periods=7, freq="D")
         plt.plot(future_dates, future_prices, label="Prédictions", linestyle="dashed", color="red")
 
         plt.xlabel("Date")
