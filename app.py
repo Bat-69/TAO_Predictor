@@ -134,30 +134,38 @@ if st.button("📊 Afficher les prévisions sur 7 jours"):
         model = train_lstm(X.reshape(-1, X.shape[1], 1), y)
         future_prices = predict_future_prices(model, df, scaler, days=7)
 
-        plt.figure(figsize=(10, 5))
-        plt.plot(df["timestamp"], df["price"], label="Prix réel", color="blue")
         future_dates = pd.date_range(start=df["timestamp"].iloc[-1], periods=8, freq="D")[1:]
-        plt.plot(future_dates, future_prices, label="Prédictions 7 jours", linestyle="dashed", color="red")
 
-        # Affichage optionnel de la MACD et du RSI
-        if st.checkbox("📈 Afficher MACD"):
-            plt.plot(df["timestamp"], df["MACD"], label="MACD", color="purple")
-            plt.plot(df["timestamp"], df["Signal_Line"], label="Signal Line", color="orange")
+        # Création de la figure principale
+        fig, ax1 = plt.subplots(figsize=(10, 5))
 
-        if st.checkbox("📊 Afficher RSI"):
-            plt.figure(figsize=(10, 3))
-            plt.plot(df["timestamp"], df["RSI"], label="RSI", color="green")
-            plt.axhline(70, linestyle="--", color="red")
-            plt.axhline(30, linestyle="--", color="blue")
-            plt.title("RSI - Indice de Force Relative")
-            plt.legend()
-            st.pyplot(plt)
+        # Courbe des prix réels
+        ax1.plot(df["timestamp"], df["price"], label="Prix réel", color="blue")
+        ax1.plot(future_dates, future_prices, label="Prédictions 7 jours", linestyle="dashed", color="red")
+        ax1.set_xlabel("Date")
+        ax1.set_ylabel("Prix en USD")
+        ax1.set_title("📈 Prédiction du prix TAO sur 7 jours")
+        ax1.legend()
 
-        plt.xlabel("Date")
-        plt.ylabel("Prix en USD")
-        plt.title("📈 Prédiction du prix TAO sur 7 jours")
-        plt.legend()
-        st.pyplot(plt)
+        # Ajout de la MACD si cochée
+        if st.checkbox("📈 Afficher MACD (7 jours)"):
+            ax2 = ax1.twinx()
+            ax2.plot(df["timestamp"], df["MACD"], label="MACD", color="purple", alpha=0.6)
+            ax2.plot(df["timestamp"], df["Signal_Line"], label="Signal Line", color="orange", alpha=0.6)
+            ax2.set_ylabel("MACD")
+            ax2.legend(loc="upper left")
+
+        st.pyplot(fig)  # Affichage du graphique principal
+
+        # RSI sur un graphique séparé
+        if st.checkbox("📊 Afficher RSI (7 jours)"):
+            fig_rsi, ax_rsi = plt.subplots(figsize=(10, 3))
+            ax_rsi.plot(df["timestamp"], df["RSI"], label="RSI", color="green")
+            ax_rsi.axhline(70, linestyle="--", color="red")
+            ax_rsi.axhline(30, linestyle="--", color="blue")
+            ax_rsi.set_title("RSI - Indice de Force Relative (7 jours)")
+            ax_rsi.legend()
+            st.pyplot(fig_rsi)  # Affichage du graphique RSI
     else:
         st.error("Erreur : Impossible d'afficher les prévisions.")
 
@@ -172,29 +180,37 @@ if st.button("📊 Afficher les prévisions sur 30 jours"):
         model = train_lstm(X.reshape(-1, X.shape[1], 1), y)
         future_prices = predict_future_prices(model, df, scaler, days=30)
 
-        plt.figure(figsize=(10, 5))
-        plt.plot(df["timestamp"], df["price"], label="Prix réel", color="blue")
         future_dates = pd.date_range(start=df["timestamp"].iloc[-1], periods=31, freq="D")[1:]
-        plt.plot(future_dates, future_prices, label="Prédictions 30 jours", linestyle="dashed", color="green")
 
-        # Affichage optionnel de la MACD et du RSI
+        # Création de la figure
+        fig, ax1 = plt.subplots(figsize=(10, 5))
+
+        # Courbe des prix réels
+        ax1.plot(df["timestamp"], df["price"], label="Prix réel", color="blue")
+        ax1.plot(future_dates, future_prices, label="Prédictions 30 jours", linestyle="dashed", color="green")
+        ax1.set_xlabel("Date")
+        ax1.set_ylabel("Prix en USD")
+        ax1.set_title("📈 Prédiction du prix TAO sur 30 jours")
+        ax1.legend()
+
+        # Ajout de la MACD si cochée
         if st.checkbox("📈 Afficher MACD (30 jours)"):
-            plt.plot(df["timestamp"], df["MACD"], label="MACD", color="purple")
-            plt.plot(df["timestamp"], df["Signal_Line"], label="Signal Line", color="orange")
+            ax2 = ax1.twinx()
+            ax2.plot(df["timestamp"], df["MACD"], label="MACD", color="purple", alpha=0.6)
+            ax2.plot(df["timestamp"], df["Signal_Line"], label="Signal Line", color="orange", alpha=0.6)
+            ax2.set_ylabel("MACD")
+            ax2.legend(loc="upper left")
 
+        st.pyplot(fig)  # Affichage du graphique principal
+
+        # RSI sur un graphique séparé
         if st.checkbox("📊 Afficher RSI (30 jours)"):
-            plt.figure(figsize=(10, 3))
-            plt.plot(df["timestamp"], df["RSI"], label="RSI", color="green")
-            plt.axhline(70, linestyle="--", color="red")
-            plt.axhline(30, linestyle="--", color="blue")
-            plt.title("RSI - Indice de Force Relative (30 jours)")
-            plt.legend()
-            st.pyplot(plt)
-
-        plt.xlabel("Date")
-        plt.ylabel("Prix en USD")
-        plt.title("📈 Prédiction du prix TAO sur 30 jours")
-        plt.legend()
-        st.pyplot(plt)
+            fig_rsi, ax_rsi = plt.subplots(figsize=(10, 3))
+            ax_rsi.plot(df["timestamp"], df["RSI"], label="RSI", color="green")
+            ax_rsi.axhline(70, linestyle="--", color="red")
+            ax_rsi.axhline(30, linestyle="--", color="blue")
+            ax_rsi.set_title("RSI - Indice de Force Relative (30 jours)")
+            ax_rsi.legend()
+            st.pyplot(fig_rsi)  # Affichage du graphique RSI
     else:
         st.error("Erreur : Impossible d'afficher les prévisions.")
