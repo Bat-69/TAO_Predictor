@@ -107,19 +107,51 @@ if st.button("🔮 Prédire le prix dans 7 jours"):
         st.error("Erreur : Impossible de prédire le prix.")
 import matplotlib.pyplot as plt
 
+def calculate_macd(df, short_window=12, long_window=26, signal_window=9):
+    df["EMA_short"] = df["price"].ewm(span=short_window, adjust=False).mean()
+    df["EMA_long"] = df["price"].ewm(span=long_window, adjust=False).mean()
+    df["MACD"] = df["EMA_short"] - df["EMA_long"]
+    df["Signal_Line"] = df["MACD"].ewm(span=signal_window, adjust=False).mean()
+    return df
+
+def calculate_rsi(df, window=14):
+    delta = df["price"].diff(1)
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    
+    rs = gain / loss
+    df["RSI"] = 100 - (100 / (1 + rs))
+    return df
+
 # Bouton pour prédire et afficher le graphique
 if st.button("📊 Afficher les prévisions sur 7 jours"):
     df = get_tao_history()
     if df is not None:
+        df = calculate_macd(df)
+        df = calculate_rsi(df)
+
         X, y, scaler = prepare_data(df)
         model = train_lstm(X.reshape(-1, X.shape[1], 1), y)
         future_prices = predict_future_prices(model, df, scaler, days=7)
 
-        # Création du graphique
         plt.figure(figsize=(10, 5))
         plt.plot(df["timestamp"], df["price"], label="Prix réel", color="blue")
         future_dates = pd.date_range(start=df["timestamp"].iloc[-1], periods=8, freq="D")[1:]
-        plt.plot(future_dates, future_prices, label="Prédictions", linestyle="dashed", color="red")
+        plt.plot(future_dates, future_prices, label="Prédictions 7 jours", linestyle="dashed", color="red")
+
+        # Affichage optionnel de la MACD et du RSI
+        if st.checkbox("📈 Afficher MACD"):
+            plt.plot(df["timestamp"], df["MACD"], label="MACD", color="purple")
+            plt.plot(df["timestamp"], df["Signal_Line"], label="Signal Line", color="orange")
+
+        if st.checkbox("📊 Afficher RSI"):
+            plt.figure(figsize=(10, 3))
+            plt.plot(df["timestamp"], df["RSI"], label="RSI", color="green")
+            plt.axhline(70, linestyle="--", color="red")
+            plt.axhline(30, linestyle="--", color="blue")
+            plt.title("RSI - Indice de Force Relative")
+            plt.legend()
+            st.pyplot(plt)
 
         plt.xlabel("Date")
         plt.ylabel("Prix en USD")
@@ -128,19 +160,36 @@ if st.button("📊 Afficher les prévisions sur 7 jours"):
         st.pyplot(plt)
     else:
         st.error("Erreur : Impossible d'afficher les prévisions.")
+
 # Bouton pour afficher les prévisions sur 30 jours
 if st.button("📊 Afficher les prévisions sur 30 jours"):
     df = get_tao_history()
     if df is not None:
+        df = calculate_macd(df)
+        df = calculate_rsi(df)
+
         X, y, scaler = prepare_data(df)
         model = train_lstm(X.reshape(-1, X.shape[1], 1), y)
         future_prices = predict_future_prices(model, df, scaler, days=30)
 
-        # Création du graphique
         plt.figure(figsize=(10, 5))
         plt.plot(df["timestamp"], df["price"], label="Prix réel", color="blue")
         future_dates = pd.date_range(start=df["timestamp"].iloc[-1], periods=31, freq="D")[1:]
         plt.plot(future_dates, future_prices, label="Prédictions 30 jours", linestyle="dashed", color="green")
+
+        # Affichage optionnel de la MACD et du RSI
+        if st.checkbox("📈 Afficher MACD (30 jours)"):
+            plt.plot(df["timestamp"], df["MACD"], label="MACD", color="purple")
+            plt.plot(df["timestamp"], df["Signal_Line"], label="Signal Line", color="orange")
+
+        if st.checkbox("📊 Afficher RSI (30 jours)"):
+            plt.figure(figsize=(10, 3))
+            plt.plot(df["timestamp"], df["RSI"], label="RSI", color="green")
+            plt.axhline(70, linestyle="--", color="red")
+            plt.axhline(30, linestyle="--", color="blue")
+            plt.title("RSI - Indice de Force Relative (30 jours)")
+            plt.legend()
+            st.pyplot(plt)
 
         plt.xlabel("Date")
         plt.ylabel("Prix en USD")
