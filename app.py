@@ -31,3 +31,26 @@ if st.button("📊 Charger l'historique des prix"):
         st.line_chart(df.set_index("timestamp")["price"])
     else:
         st.error("Erreur : Impossible de récupérer les données.")
+from sklearn.preprocessing import MinMaxScaler
+import numpy as np
+
+# Normalisation des prix
+def prepare_data(df, window_size=7):
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    df["scaled_price"] = scaler.fit_transform(df["price"].values.reshape(-1, 1))
+    
+    X, y = [], []
+    for i in range(len(df) - window_size):
+        X.append(df["scaled_price"].iloc[i : i + window_size].values)
+        y.append(df["scaled_price"].iloc[i + window_size])
+
+    return np.array(X), np.array(y), scaler
+
+# Bouton pour préparer les données
+if st.button("🔄 Préparer les données"):
+    df = get_tao_history()
+    if df is not None:
+        X, y, scaler = prepare_data(df)
+        st.write(f"✅ Données préparées avec {X.shape[0]} échantillons.")
+    else:
+        st.error("Erreur : Impossible de préparer les données.")
