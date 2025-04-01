@@ -102,7 +102,7 @@ if st.button("🔮 Prédire le prix dans 7 jours"):
         X, y, scaler = prepare_data(df)
         model = train_lstm(X.reshape(-1, X.shape[1], 1), y)
         future_prices = predict_future_prices(model, df, scaler, days=7)
-st.write(f"📈 **Prix prédit dans 7 jours : {future_prices[-1]:.2f} USD**")
+        st.write(f"📈 **Prix prédit dans 7 jours : {future_prices[-1]:.2f} USD**")
     else:
         st.error("Erreur : Impossible de prédire le prix.")
 import matplotlib.pyplot as plt
