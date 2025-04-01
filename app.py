@@ -3,8 +3,11 @@ import requests
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
 
-# 📌 API CoinGecko pour récupérer l'historique des prix et volumes
+# 📌 API CoinGecko pour récupérer les prix
 COINGECKO_URL = "https://api.coingecko.com/api/v3/coins/bittensor/market_chart"
 
 def get_tao_history(days=365):
@@ -18,8 +21,6 @@ def get_tao_history(days=365):
         
         df = pd.DataFrame(prices, columns=["timestamp", "price"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        
-        # Ajout du volume de trading
         df["volume"] = [v[1] for v in volumes]
 
         return df
@@ -29,67 +30,95 @@ def get_tao_history(days=365):
 
 # 📈 Calcul des indicateurs techniques
 def calculate_indicators(df):
-    df["SMA_14"] = df["price"].rolling(window=14).mean()  # Moyenne Mobile 14 jours
-
-    # MACD
+    df["SMA_14"] = df["price"].rolling(window=14).mean()
     short_ema = df["price"].ewm(span=12, adjust=False).mean()
     long_ema = df["price"].ewm(span=26, adjust=False).mean()
     df["MACD"] = short_ema - long_ema
     df["MACD_Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
 
-    # RSI
     delta = df["price"].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     df["RSI"] = 100 - (100 / (1 + rs))
 
-    # Bandes de Bollinger
     df["BB_Mid"] = df["price"].rolling(window=20).mean()
     df["BB_Upper"] = df["BB_Mid"] + (df["price"].rolling(window=20).std() * 2)
     df["BB_Lower"] = df["BB_Mid"] - (df["price"].rolling(window=20).std() * 2)
 
-    return df
+    return df.dropna()
 
-# 📌 Interface Streamlit
-st.title("📊 TAO Predictor - Analyse Technique")
+# 🏗 Préparation des données pour le modèle LSTM
+def prepare_data(df, window_size=14):
+    df = calculate_indicators(df)
+    features = ["price", "volume", "MACD", "RSI", "BB_Upper", "BB_Lower"]
+    
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaled_data = scaler.fit_transform(df[features])
+    
+    X, y = [], []
+    for i in range(len(scaled_data) - window_size):
+        X.append(scaled_data[i : i + window_size])
+        y.append(scaled_data[i + window_size, 0])  # On prédit le prix futur
+    
+    return np.array(X), np.array(y), scaler
 
-# Bouton pour charger les données et afficher les indicateurs
-if st.button("📊 Charger les données et afficher les indicateurs"):
+# 🎯 Création et entraînement du modèle LSTM
+def train_lstm(X, y):
+    model = Sequential([
+        LSTM(64, return_sequences=True, input_shape=(X.shape[1], X.shape[2])),
+        Dropout(0.2),
+        LSTM(64),
+        Dense(32, activation="relu"),
+        Dense(1)
+    ])
+    model.compile(optimizer="adam", loss="mean_squared_error")
+    model.fit(X, y, epochs=25, batch_size=16, verbose=1)
+    return model
+
+# 🔮 Prédiction des prix futurs
+def predict_future_prices(model, df, scaler, days=7):
+    df = calculate_indicators(df)
+    features = ["price", "volume", "MACD", "RSI", "BB_Upper", "BB_Lower"]
+    
+    scaled_data = scaler.transform(df[features])
+    last_sequence = scaled_data[-14:].reshape(1, 14, len(features))
+    future_prices = []
+
+    for _ in range(days):
+        prediction = model.predict(last_sequence)
+        future_price = scaler.inverse_transform(
+            np.hstack([prediction, np.zeros((1, len(features) - 1))])
+        )[0][0]
+        future_prices.append(future_price)
+
+        last_sequence = np.roll(last_sequence, -1, axis=1)
+        last_sequence[0, -1, 0] = prediction[0][0]
+
+    return future_prices
+
+# 🏠 Interface utilisateur Streamlit
+st.title("📈 TAO Predictor - Optimisation du modèle")
+
+if st.button("🚀 Entraîner le modèle et afficher les prédictions"):
     df = get_tao_history()
     if df is not None:
-        df = calculate_indicators(df)
+        X, y, scaler = prepare_data(df)
+        model = train_lstm(X, y)
+        future_prices = predict_future_prices(model, df, scaler)
 
-        # Affichage des indicateurs sur le graphique
-        fig, ax1 = plt.subplots(figsize=(12, 6))
+        # 📊 Graphique des prédictions
+        fig, ax = plt.subplots(figsize=(12, 5))
+        ax.plot(df["timestamp"], df["price"], label="Prix réel", color="blue")
+        future_dates = pd.date_range(start=df["timestamp"].iloc[-1], periods=len(future_prices), freq="D")
+        ax.plot(future_dates, future_prices, label="Prédictions", linestyle="dashed", color="red")
 
-        # Courbe des prix
-        ax1.plot(df["timestamp"], df["price"], label="Prix TAO", color="blue")
-        ax1.plot(df["timestamp"], df["BB_Upper"], linestyle="dashed", color="gray", label="Bollinger Upper")
-        ax1.plot(df["timestamp"], df["BB_Lower"], linestyle="dashed", color="gray", label="Bollinger Lower")
-        ax1.set_ylabel("Prix en USD")
-        ax1.legend(loc="upper left")
-
-        # 📈 Ajout du MACD
-        ax2 = ax1.twinx()
-        ax2.plot(df["timestamp"], df["MACD"], label="MACD", color="red")
-        ax2.plot(df["timestamp"], df["MACD_Signal"], label="MACD Signal", color="green")
-        ax2.set_ylabel("MACD")
-        ax2.legend(loc="upper right")
-
-        plt.title("📊 Evolution du prix avec MACD & Bandes de Bollinger")
-        st.pyplot(fig)
-
-        # Affichage du RSI
-        fig, ax3 = plt.subplots(figsize=(12, 3))
-        ax3.plot(df["timestamp"], df["RSI"], label="RSI", color="purple")
-        ax3.axhline(70, linestyle="dashed", color="red", label="Seuil surachat")
-        ax3.axhline(30, linestyle="dashed", color="green", label="Seuil survente")
-        ax3.set_ylabel("RSI")
-        ax3.legend()
-        plt.title("📈 RSI Indicator")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Prix en USD")
+        ax.set_title("📈 Prédiction du prix TAO sur 7 jours")
+        ax.legend()
         st.pyplot(fig)
         
-        st.write("✅ **Indicateurs calculés et affichés avec succès !**")
+        st.write("✅ **Modèle entraîné avec succès et prévisions affichées !**")
     else:
         st.error("Erreur : Impossible de récupérer les données.")
