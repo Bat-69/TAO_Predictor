@@ -106,3 +106,26 @@ if st.button("🔮 Prédire le prix dans 7 jours"):
         st.write(f"📈 **Prix prédit dans 7 jours : {future_price:.2f} USD**")
     else:
         st.error("Erreur : Impossible de prédire le prix.")
+import matplotlib.pyplot as plt
+
+# Bouton pour prédire et afficher le graphique
+if st.button("📊 Afficher les prévisions sur 7 jours"):
+    df = get_tao_history()
+    if df is not None:
+        X, y, scaler = prepare_data(df)
+        model = train_lstm(X.reshape(-1, X.shape[1], 1), y)
+        future_prices = predict_future_prices(model, df, scaler)
+
+        # Création du graphique
+        plt.figure(figsize=(10, 5))
+        plt.plot(df["timestamp"], df["price"], label="Prix réel", color="blue")
+        future_dates = pd.date_range(start=df["timestamp"].iloc[-1], periods=8, freq="D")[1:]
+        plt.plot(future_dates, future_prices, label="Prédictions", linestyle="dashed", color="red")
+
+        plt.xlabel("Date")
+        plt.ylabel("Prix en USD")
+        plt.title("📈 Prédiction du prix TAO sur 7 jours")
+        plt.legend()
+        st.pyplot(plt)
+    else:
+        st.error("Erreur : Impossible d'afficher les prévisions.")
