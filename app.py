@@ -80,3 +80,20 @@ if st.button("🚀 Entraîner le modèle LSTM"):
         st.write("✅ Modèle entraîné avec succès !")
     else:
         st.error("Erreur : Impossible d'entraîner le modèle.")
+# Fonction pour prédire le prix de TAO dans 7 jours
+def predict_future_price(model, df, scaler, days=7):
+    last_sequence = df["scaled_price"].iloc[-days:].values.reshape(1, days, 1)
+    prediction = model.predict(last_sequence)
+    predicted_price = scaler.inverse_transform(prediction)[0][0]
+    return predicted_price
+
+# Bouton pour prédire le prix futur
+if st.button("🔮 Prédire le prix dans 7 jours"):
+    df = get_tao_history()
+    if df is not None:
+        X, y, scaler = prepare_data(df)
+        model = train_lstm(X.reshape(-1, X.shape[1], 1), y)
+        future_price = predict_future_price(model, df, scaler)
+        st.write(f"📈 **Prix prédit dans 7 jours : {future_price:.2f} USD**")
+    else:
+        st.error("Erreur : Impossible de prédire le prix.")
