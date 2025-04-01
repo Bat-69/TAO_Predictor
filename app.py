@@ -54,3 +54,29 @@ if st.button("🔄 Préparer les données"):
         st.write(f"✅ Données préparées avec {X.shape[0]} échantillons.")
     else:
         st.error("Erreur : Impossible de préparer les données.")
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+
+# Fonction pour créer et entraîner le modèle LSTM
+def train_lstm(X, y):
+    model = Sequential([
+        LSTM(50, return_sequences=True, input_shape=(X.shape[1], 1)),
+        LSTM(50),
+        Dense(1)
+    ])
+    model.compile(optimizer="adam", loss="mean_squared_error")
+    
+    # Entraînement du modèle
+    model.fit(X, y, epochs=20, batch_size=16, verbose=1)
+    return model
+
+# Bouton pour entraîner le modèle
+if st.button("🚀 Entraîner le modèle LSTM"):
+    df = get_tao_history()
+    if df is not None:
+        X, y, scaler = prepare_data(df)
+        model = train_lstm(X.reshape(-1, X.shape[1], 1), y)
+        st.write("✅ Modèle entraîné avec succès !")
+    else:
+        st.error("Erreur : Impossible d'entraîner le modèle.")
