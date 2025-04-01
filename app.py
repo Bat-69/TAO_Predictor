@@ -3,142 +3,93 @@ import requests
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
-from sklearn.preprocessing import MinMaxScaler
 
-# API CoinGecko pour récupérer l'historique des prix
+# 📌 API CoinGecko pour récupérer l'historique des prix et volumes
 COINGECKO_URL = "https://api.coingecko.com/api/v3/coins/bittensor/market_chart"
 
 def get_tao_history(days=365):
     params = {"vs_currency": "usd", "days": days, "interval": "daily"}
     response = requests.get(COINGECKO_URL, params=params)
-
+    
     if response.status_code == 200:
         data = response.json()
         prices = data["prices"]
+        volumes = data["total_volumes"]
+        
         df = pd.DataFrame(prices, columns=["timestamp", "price"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        
+        # Ajout du volume de trading
+        df["volume"] = [v[1] for v in volumes]
+
         return df
     else:
         st.error(f"Erreur {response.status_code} : Impossible de récupérer les données.")
         return None
 
-# Préparation des données pour le LSTM
-def prepare_data(df, window_size=7):
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    df["scaled_price"] = scaler.fit_transform(df["price"].values.reshape(-1, 1))
+# 📈 Calcul des indicateurs techniques
+def calculate_indicators(df):
+    df["SMA_14"] = df["price"].rolling(window=14).mean()  # Moyenne Mobile 14 jours
 
-    X, y = [], []
-    for i in range(len(df) - window_size):
-        X.append(df["scaled_price"].iloc[i : i + window_size].values)
-        y.append(df["scaled_price"].iloc[i + window_size])
+    # MACD
+    short_ema = df["price"].ewm(span=12, adjust=False).mean()
+    long_ema = df["price"].ewm(span=26, adjust=False).mean()
+    df["MACD"] = short_ema - long_ema
+    df["MACD_Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
 
-    return np.array(X), np.array(y), scaler
-
-# Entraînement du modèle LSTM
-def train_lstm(X, y):
-    model = Sequential([
-        LSTM(50, return_sequences=True, input_shape=(X.shape[1], 1)),
-        LSTM(50),
-        Dense(1)
-    ])
-    model.compile(optimizer="adam", loss="mean_squared_error")
-    model.fit(X, y, epochs=20, batch_size=16, verbose=0)
-    return model
-
-# Prédictions des prix futurs
-def predict_future_prices(model, df, scaler, days=7):
-    last_sequence = df["scaled_price"].iloc[-7:].values.reshape(1, 7, 1)
-    future_prices = []
-
-    for _ in range(days):
-        prediction = model.predict(last_sequence)
-        future_price = scaler.inverse_transform(prediction)[0][0]
-        future_prices.append(future_price)
-
-        last_sequence = np.roll(last_sequence, -1)
-        last_sequence[0, -1, 0] = prediction[0][0]
-
-    return future_prices
-
-# Calcul des indicateurs MACD et RSI
-def compute_macd_rsi(df):
-    df["EMA12"] = df["price"].ewm(span=12, adjust=False).mean()
-    df["EMA26"] = df["price"].ewm(span=26, adjust=False).mean()
-    df["MACD"] = df["EMA12"] - df["EMA26"]
-    df["Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
-
+    # RSI
     delta = df["price"].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     df["RSI"] = 100 - (100 / (1 + rs))
-    
+
+    # Bandes de Bollinger
+    df["BB_Mid"] = df["price"].rolling(window=20).mean()
+    df["BB_Upper"] = df["BB_Mid"] + (df["price"].rolling(window=20).std() * 2)
+    df["BB_Lower"] = df["BB_Mid"] - (df["price"].rolling(window=20).std() * 2)
+
     return df
 
-# Interface Streamlit
-st.title("📈 TAO Predictor - Prédictions sur 7 et 30 jours")
+# 📌 Interface Streamlit
+st.title("📊 TAO Predictor - Analyse Technique")
 
-df = get_tao_history()
-if df is not None:
-    df = compute_macd_rsi(df)
+# Bouton pour charger les données et afficher les indicateurs
+if st.button("📊 Charger les données et afficher les indicateurs"):
+    df = get_tao_history()
+    if df is not None:
+        df = calculate_indicators(df)
 
-    # Sélection des indicateurs
-    show_macd = st.checkbox("Afficher MACD")
-    show_rsi = st.checkbox("Afficher RSI")
+        # Affichage des indicateurs sur le graphique
+        fig, ax1 = plt.subplots(figsize=(12, 6))
 
-    # Bouton pour afficher les prévisions sur 7 jours
-    if st.button("📊 Afficher les prévisions sur 7 jours"):
-        X, y, scaler = prepare_data(df)
-        model = train_lstm(X.reshape(-1, X.shape[1], 1), y)
-        future_prices = predict_future_prices(model, df, scaler, days=7)
+        # Courbe des prix
+        ax1.plot(df["timestamp"], df["price"], label="Prix TAO", color="blue")
+        ax1.plot(df["timestamp"], df["BB_Upper"], linestyle="dashed", color="gray", label="Bollinger Upper")
+        ax1.plot(df["timestamp"], df["BB_Lower"], linestyle="dashed", color="gray", label="Bollinger Lower")
+        ax1.set_ylabel("Prix en USD")
+        ax1.legend(loc="upper left")
 
-        # Graphique
-        plt.figure(figsize=(10, 5))
-        plt.plot(df["timestamp"], df["price"], label="Prix réel", color="blue")
-        future_dates = pd.date_range(start=df["timestamp"].iloc[-1], periods=8, freq="D")[1:]
-        plt.plot(future_dates, future_prices, label="Prédictions 7 jours", linestyle="dashed", color="red")
+        # 📈 Ajout du MACD
+        ax2 = ax1.twinx()
+        ax2.plot(df["timestamp"], df["MACD"], label="MACD", color="red")
+        ax2.plot(df["timestamp"], df["MACD_Signal"], label="MACD Signal", color="green")
+        ax2.set_ylabel("MACD")
+        ax2.legend(loc="upper right")
 
-        if show_macd:
-            plt.plot(df["timestamp"], df["MACD"], label="MACD", linestyle="dotted", color="purple")
-            plt.plot(df["timestamp"], df["Signal"], label="Signal MACD", linestyle="dotted", color="orange")
+        plt.title("📊 Evolution du prix avec MACD & Bandes de Bollinger")
+        st.pyplot(fig)
 
-        if show_rsi:
-            plt.twinx()
-            plt.plot(df["timestamp"], df["RSI"], label="RSI", linestyle="dashed", color="green")
-            plt.ylim(0, 100)
-
-        plt.xlabel("Date")
-        plt.ylabel("Prix en USD")
-        plt.title("📈 Prédiction du prix TAO sur 7 jours")
-        plt.legend()
-        st.pyplot(plt)
-
-    # Bouton pour afficher les prévisions sur 30 jours
-    if st.button("📊 Afficher les prévisions sur 30 jours"):
-        X, y, scaler = prepare_data(df)
-        model = train_lstm(X.reshape(-1, X.shape[1], 1), y)
-        future_prices = predict_future_prices(model, df, scaler, days=30)
-
-        # Graphique
-        plt.figure(figsize=(10, 5))
-        plt.plot(df["timestamp"], df["price"], label="Prix réel", color="blue")
-        future_dates = pd.date_range(start=df["timestamp"].iloc[-1], periods=31, freq="D")[1:]
-        plt.plot(future_dates, future_prices, label="Prédictions 30 jours", linestyle="dashed", color="green")
-
-        if show_macd:
-            plt.plot(df["timestamp"], df["MACD"], label="MACD", linestyle="dotted", color="purple")
-            plt.plot(df["timestamp"], df["Signal"], label="Signal MACD", linestyle="dotted", color="orange")
-
-        if show_rsi:
-            plt.twinx()
-            plt.plot(df["timestamp"], df["RSI"], label="RSI", linestyle="dashed", color="green")
-            plt.ylim(0, 100)
-
-        plt.xlabel("Date")
-        plt.ylabel("Prix en USD")
-        plt.title("📈 Prédiction du prix TAO sur 30 jours")
-        plt.legend()
-        st.pyplot(plt)
+        # Affichage du RSI
+        fig, ax3 = plt.subplots(figsize=(12, 3))
+        ax3.plot(df["timestamp"], df["RSI"], label="RSI", color="purple")
+        ax3.axhline(70, linestyle="dashed", color="red", label="Seuil surachat")
+        ax3.axhline(30, linestyle="dashed", color="green", label="Seuil survente")
+        ax3.set_ylabel("RSI")
+        ax3.legend()
+        plt.title("📈 RSI Indicator")
+        st.pyplot(fig)
+        
+        st.write("✅ **Indicateurs calculés et affichés avec succès !**")
+    else:
+        st.error("Erreur : Impossible de récupérer les données.")
