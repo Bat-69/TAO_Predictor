@@ -12,14 +12,15 @@ COINGECKO_URL = "https://api.coingecko.com/api/v3/coins/bittensor/market_chart"
 def get_tao_history(days=365):
     params = {"vs_currency": "usd", "days": days, "interval": "daily"}
     response = requests.get(COINGECKO_URL, params=params)
-    data = response.json()
-
-    try:
+    
+    if response.status_code == 200:
+        data = response.json()
         prices = data["prices"]
         df = pd.DataFrame(prices, columns=["timestamp", "price"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         return df
-    except KeyError:
+    else:
+        st.error(f"Erreur {response.status_code} : Impossible de récupérer les données.")
         return None
 
 # Bouton pour récupérer les données
