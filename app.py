@@ -17,18 +17,26 @@ st.title("📈 TAO Predictor - Prédiction à 7 et 30 jours")
 # API CoinGecko pour récupérer l'historique des prix
 COINGECKO_URL = "https://api.coingecko.com/api/v3/coins/bittensor/market_chart"
 
-def get_tao_history(days=365):  # 1 ans d'historique
+def get_tao_history(days=365):  # CoinGecko limite à 365 jours pour les comptes gratuits
+    COINGECKO_URL = "https://api.coingecko.com/api/v3/coins/bittensor/market_chart"
     params = {"vs_currency": "usd", "days": days, "interval": "daily"}
-    response = requests.def get_tao_history(days=365):  # CoinGecko limite à 365 jours pour les comptes gratuits(COINGECKO_URL, params=params)
     
-    if response.status_code == 200:
-        data = response.json()
-        prices = data["prices"]
-        df = pd.DataFrame(prices, columns=["timestamp", "price"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        return df
-    else:
-        st.error(f"Erreur {response.status_code} : Impossible de récupérer les données.")
+    try:
+        response = requests.get(COINGECKO_URL, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            prices = data.get("prices", [])
+            if not prices:
+                st.error("⚠️ Aucune donnée reçue. Réessaie plus tard.")
+                return None
+            df = pd.DataFrame(prices, columns=["timestamp", "price"])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+            return df
+        else:
+            st.error(f"❌ Erreur {response.status_code} : {response.json()}")
+            return None
+    except requests.exceptions.RequestException as e:
+        st.error(f"⏳ Erreur de connexion : {e}")
         return None
 
 # Fonction pour calculer le RSI (Relative Strength Index)
