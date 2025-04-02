@@ -3,11 +3,12 @@ import requests
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import ta  # Librairie pour les indicateurs techniques
+import ta  # Librairie d'indicateurs techniques
 from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
+from tensorflow.keras.layers import LSTM, Dense, Dropout, BatchNormalization
+from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.metrics import mean_squared_error
 
 # 📌 API CoinGecko pour récupérer l'historique des prix
@@ -32,22 +33,21 @@ def get_tao_history(days=365):
 
 # 📌 Ajout des indicateurs techniques
 def add_technical_indicators(df):
-    df["SMA_10"] = ta.trend.sma_indicator(df["price"], window=10)
-    df["EMA_10"] = ta.trend.ema_indicator(df["price"], window=10)
+    df["SMA_14"] = ta.trend.sma_indicator(df["price"], window=14)
+    df["EMA_14"] = ta.trend.ema_indicator(df["price"], window=14)
     df["RSI"] = ta.momentum.rsi(df["price"], window=14)
     df["MACD"] = ta.trend.macd(df["price"])
     df["Bollinger_High"] = ta.volatility.bollinger_hband(df["price"])
     df["Bollinger_Low"] = ta.volatility.bollinger_lband(df["price"])
-    
-    # Remplacer les valeurs NaN par la moyenne des colonnes
-    df.fillna(df.mean(), inplace=True)
-    
+    df["ATR"] = ta.volatility.average_true_range(df["price"], window=14)
+
+    df.fillna(df.mean(), inplace=True)  # Remplacer les valeurs NaN
     return df
 
 # 📌 Normalisation et préparation des données
-def prepare_data(df, window_size=7):
+def prepare_data(df, window_size=14):
     scaler = MinMaxScaler(feature_range=(0, 1))
-    feature_cols = ["price", "SMA_10", "EMA_10", "RSI", "MACD", "Bollinger_High", "Bollinger_Low"]
+    feature_cols = ["price", "SMA_14", "EMA_14", "RSI", "MACD", "Bollinger_High", "Bollinger_Low", "ATR"]
     df_scaled = pd.DataFrame(scaler.fit_transform(df[feature_cols]), columns=feature_cols)
     
     X, y = [], []
@@ -57,24 +57,33 @@ def prepare_data(df, window_size=7):
 
     return np.array(X), np.array(y), scaler
 
-# 📌 Création et entraînement du modèle LSTM
+# 📌 Création et entraînement du modèle LSTM optimisé
 def train_lstm(X, y):
     model = Sequential([
-        LSTM(64, return_sequences=True, input_shape=(X.shape[1], X.shape[2])),
+        LSTM(128, return_sequences=True, input_shape=(X.shape[1], X.shape[2])),
+        BatchNormalization(),
+        Dropout(0.2),
+        LSTM(128, return_sequences=True),
+        BatchNormalization(),
+        Dropout(0.2),
         LSTM(64),
         Dense(32, activation="relu"),
         Dense(1)
     ])
+    
     model.compile(optimizer="adam", loss="mean_squared_error")
     
-    # 🔥 Entraînement du modèle
-    model.fit(X, y, epochs=25, batch_size=16, verbose=1)
+    # 🔥 Ajout d’early stopping pour éviter l’overfitting
+    early_stopping = EarlyStopping(monitor="loss", patience=5, restore_best_weights=True)
+    
+    # Entraînement du modèle
+    model.fit(X, y, epochs=50, batch_size=32, verbose=1, callbacks=[early_stopping])
     return model
 
 # 📌 Prédiction des prix futurs
 def predict_future_prices(model, df, scaler, days=30):
-    feature_cols = ["price", "SMA_10", "EMA_10", "RSI", "MACD", "Bollinger_High", "Bollinger_Low"]
-    last_sequence = df[feature_cols].iloc[-7:].values.reshape(1, 7, len(feature_cols))  
+    feature_cols = ["price", "SMA_14", "EMA_14", "RSI", "MACD", "Bollinger_High", "Bollinger_Low", "ATR"]
+    last_sequence = df[feature_cols].iloc[-14:].values.reshape(1, 14, len(feature_cols))  
     future_prices = []
 
     for _ in range(days):
@@ -89,15 +98,14 @@ def predict_future_prices(model, df, scaler, days=30):
     return future_prices
 
 # 📌 Interface Streamlit
-st.title("📈 TAO Predictor - Prédiction avec Indicateurs Techniques")
+st.title("📈 TAO Predictor - Optimisation avancée")
 
-if st.button("🚀 Entraîner le modèle LSTM"):
+if st.button("🚀 Entraîner le modèle LSTM amélioré"):
     df = get_tao_history()
     if df is not None:
         df = add_technical_indicators(df)
         X, y, scaler = prepare_data(df)
         model = train_lstm(X.reshape(-1, X.shape[1], X.shape[2]), y)
-
         st.success("✅ Modèle entraîné avec succès !")
 
 # 📌 Prédiction et affichage
@@ -109,7 +117,6 @@ if st.button("📊 Afficher les prévisions sur 30 jours"):
         model = train_lstm(X.reshape(-1, X.shape[1], X.shape[2]), y)
         future_prices = predict_future_prices(model, df, scaler, days=30)
 
-        # Graphique
         plt.figure(figsize=(10, 5))
         plt.plot(df["timestamp"], df["price"], label="Prix réel", color="blue")
         future_dates = pd.date_range(start=df["timestamp"].iloc[-1], periods=31, freq="D")[1:]
@@ -117,7 +124,7 @@ if st.button("📊 Afficher les prévisions sur 30 jours"):
 
         plt.xlabel("Date")
         plt.ylabel("Prix en USD")
-        plt.title("📈 Prédiction TAO avec indicateurs techniques")
+        plt.title("📈 Prédiction TAO optimisée")
         plt.legend()
         st.pyplot(plt)
     else:
