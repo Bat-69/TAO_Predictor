@@ -39,9 +39,14 @@ def add_technical_indicators(df):
     df["MACD"] = ta.trend.macd(df["price"])
     df["Bollinger_High"] = ta.volatility.bollinger_hband(df["price"])
     df["Bollinger_Low"] = ta.volatility.bollinger_lband(df["price"])
-    df["ATR"] = ta.volatility.average_true_range(df["price"], window=14)
+    
+    # 🚀 Simuler les prix high et low pour calculer l'ATR
+    df["high"] = df["price"] * (1 + np.random.uniform(0.001, 0.01, len(df)))
+    df["low"] = df["price"] * (1 - np.random.uniform(0.001, 0.01, len(df)))
+    
+    df["ATR"] = ta.volatility.average_true_range(df["high"], df["low"], df["price"], window=14)
 
-    df.fillna(df.mean(), inplace=True)  # Remplacer les valeurs NaN
+    df.fillna(df.mean(), inplace=True)  # Remplacer les NaN
     return df
 
 # 📌 Normalisation et préparation des données
